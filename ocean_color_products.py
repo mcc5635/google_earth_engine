@@ -133,21 +133,64 @@ iname=iname=(first_image.get('year').getInfo())
 Map.addLayer(first_image, Vis, str(iname))
 Map
 
+# Region-based Time Series 
 
+seas_shapefile_path = "./../seas/boxMed.geojson"
+seas = geemap.geojson_to_ee(seas_shapefile_path)
 
+def getTM4RoI(imgcol):
+    def iter_func(image, newlist):
+      date = ee.Number.parse(image.date().format("YYYYMMdd"))
+      stat = image.reduceRegion(
+        reducer = ee.Reducer.mean(),
+        geometry = seas,
+        scale = 5000,
+        maxPixels = 1e15
+      )
+      newlist = ee.List(newlist)
+      return ee.List(newlist.add([date, stat]))
+    ymd = imgcol.iterate(iter_func, ee.List([]))
+    return list(ee.List(ymd).getInfo())
 
+def Convert2TM_DF(inList):
+  newList = []
+  for i, item in enumerate(inList):
+      val0 = item[1].values()
+      if np.any(val0):
+          val=list(val0)
+          newListappend([item[0],val[0]])
+  DF=pd.DataFrame(newList,columns=['Dates' ,'Chl-a [\mu g m^{-3}'])
+  datetime_series = pd.to_datetime(DF['Dates'],format='%Y%m%d')
+  DF.drop('Dates', axis=1, inplace=True)
+  DF.set_index(datetime_series, inplace=True,drop=True)
+  DF.mask(DF.eq('None')).dropna()
+  return DF
 
+TM_Chla_m = Convert2TM_DF(getTM4RoI(monthlyChla))
+TM_Chla_y = Convert2TM_DF(getTM4RoI(yearlyChla))
+TM_Chla_mC = Convert2TM_DF(getTM4RoI(MonthlyClim))
 
+# Visualize Mean Chl-a (Monthly)
 
+ax_=TM_Chla_m.plot(kind='line',
+                    legend= False,
+                    ylabel='Chl-a [\mu g m^{-3}]',
+                    xlabel='Date',
+                    title='Monthly mean of Chl-a in the Mediterranean')
 
+# Visualize Mean Chl-a (Yearly)
+ax_=TM_Chla_y.plot(kind='line',
+                    legend= False,
+                    ylabel='Chl-a [\mu g m^{-3}]',
+                    xlabel='Date',
+                    title='Yearly mean of Chl-a in the Mediterranean')
 
-
-
-
-
-
-
-
+# Visualize Climatology of Chl-a
+ax_=TM_Chla_mC.plot(kind='line',
+                    legend= False,
+                    ylabel='Chl-a [\mu g m^{-3}]',
+                    xlabel='Date',
+                    title='Monthly climatology of Chl-a in the Mediterranean')
 
 
 
